@@ -1,0 +1,242 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          String    @default("user") // admin, user, accountant
+  phone         String?
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  companies     CompanyUser[]
+  invoices      Invoice[]
+  payouts       Payout[]
+  activities    Activity[]
+  sales         Sale[]
+}
+
+model Company {
+  id            String    @id @default(cuid())
+  name          String
+  gstin         String?
+  address       String?
+  phone         String?
+  email         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  users         CompanyUser[]
+  invoices      Invoice[]
+  vendors       Vendor[]
+  items         Item[]
+  payouts       Payout[]
+  stockEntries  StockEntry[]
+  sales         Sale[]
+  categories    Category[]
+  subcategories Subcategory[]
+}
+
+model CompanyUser {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  role      String   @default("member") // owner, admin, member
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+}
+
+model Vendor {
+  id            String    @id @default(cuid())
+  name          String
+  gstin         String?
+  pan           String?
+  email         String?
+  phone         String?
+  address       String?
+  bankName      String?
+  accountNumber String?
+  ifscCode      String?
+  upiId         String?
+  category      String?   // raw material, packaging, utilities, etc.
+  isActive      Boolean   @default(true)
+  companyId     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoices      Invoice[]
+  payouts       Payout[]
+}
+
+model Category {
+  id            String        @id @default(cuid())
+  name          String
+  companyId     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subcategories Subcategory[]
+  invoiceItems  InvoiceItem[]
+
+  @@unique([name, companyId])
+}
+
+model Subcategory {
+  id            String        @id @default(cuid())
+  name          String
+  categoryId    String
+  companyId     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  category      Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceItems  InvoiceItem[]
+
+  @@unique([name, categoryId, companyId])
+}
+
+model Item {
+  id            String    @id @default(cuid())
+  name          String
+  sku           String?
+  unit          String    @default("pcs") // kg, ltr, pcs, box, etc.
+  category      String?
+  hsnCode       String?
+  gstRate       Float     @default(0)
+  companyId     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceItems  InvoiceItem[]
+  stockEntries  StockEntry[]
+}
+
+model Invoice {
+  id              String    @id @default(cuid())
+  invoiceNumber   String
+  invoiceDate     DateTime
+  dueDate         DateTime?
+  vendorId        String?
+  companyId       String
+  userId          String
+  subtotal        Float     @default(0)
+  taxAmount       Float     @default(0)
+  totalAmount     Float     @default(0)
+  status          String    @default("draft") // draft, reviewed, approved, pushed_to_tally, paid
+  ocrRawData      String?   // JSON string of raw OCR data
+  imageUrl        String?
+  notes           String?
+  tallyPushed     Boolean   @default(false)
+  tallyPushedAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  vendor          Vendor?   @relation(fields: [vendorId], references: [id])
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id])
+  items           InvoiceItem[]
+}
+
+model InvoiceItem {
+  id            String       @id @default(cuid())
+  invoiceId     String
+  itemId        String?
+  categoryId    String?
+  subcategoryId String?
+  description   String
+  quantity      Float        @default(1)
+  unit          String       @default("pcs")
+  unitPrice     Float        @default(0)
+  gstRate       Float        @default(0)
+  gstAmount     Float        @default(0)
+  totalAmount   Float        @default(0)
+  createdAt     DateTime     @default(now())
+
+  invoice       Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item          Item?        @relation(fields: [itemId], references: [id])
+  category      Category?    @relation(fields: [categoryId], references: [id])
+  subcategory   Subcategory? @relation(fields: [subcategoryId], references: [id])
+}
+
+model Payout {
+  id              String    @id @default(cuid())
+  vendorId        String
+  companyId       String
+  userId          String
+  amount          Float
+  paymentMethod   String    @default("bank_transfer") // bank_transfer, upi, cheque, cash
+  paymentRef      String?
+  status          String    @default("pending") // pending, processing, completed, failed
+  paymentDate     DateTime?
+  notes           String?
+  category        String    @default("vendor") // vendor, utility, other
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  vendor          Vendor    @relation(fields: [vendorId], references: [id])
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id])
+}
+
+model StockEntry {
+  id            String    @id @default(cuid())
+  itemId        String
+  companyId     String
+  type          String    @default("in") // in, out, adjustment
+  quantity      Float
+  unitPrice     Float     @default(0)
+  totalValue    Float     @default(0)
+  reference     String?   // invoice number or reason
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  item          Item      @relation(fields: [itemId], references: [id])
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model Sale {
+  id              String    @id @default(cuid())
+  date            DateTime  @default(now())
+  amount          Float
+  paymentMethod   String    // cash, upi, card, swiggy, zomato, other
+  description     String?
+  customerName    String?
+  orderNumber     String?
+  companyId       String
+  userId          String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id])
+}
+
+model Activity {
+  id          String    @id @default(cuid())
+  userId      String
+  action      String    // invoice_scanned, invoice_approved, payout_made, tally_pushed, etc.
+  entityType  String?   // invoice, vendor, payout, stock
+  entityId    String?
+  details     String?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id])
+}
