@@ -5,26 +5,25 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  if (process.env.TURSO_DATABASE_URL) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { PrismaLibSql } = require("@prisma/adapter-libsql");
-    const adapter = new PrismaLibSql({
-      url: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    });
-    return new PrismaClient({ adapter } as any);
+  try {
+    if (process.env.TURSO_DATABASE_URL) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { PrismaLibSql } = require("@prisma/adapter-libsql");
+      const adapter = new PrismaLibSql({
+        url: process.env.TURSO_DATABASE_URL,
+        authToken: process.env.TURSO_AUTH_TOKEN,
+      });
+      return new PrismaClient({ adapter } as any);
+    }
+  } catch (e) {
+    console.error("Failed to create Turso adapter, falling back to default:", e);
   }
   return new PrismaClient();
 }
 
-const prismaClientProxy = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    if (!globalForPrisma.prisma) {
-      globalForPrisma.prisma = createPrismaClient();
-    }
-    return (globalForPrisma.prisma as any)[prop];
-  },
-});
+if (!globalForPrisma.prisma) {
+  globalForPrisma.prisma = createPrismaClient();
+}
 
-export const prisma = prismaClientProxy;
+export const prisma = globalForPrisma.prisma;
 export default prisma;

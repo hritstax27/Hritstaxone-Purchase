@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
 
     const { name, email, password, phone, companyName, gstin } = validation.data;
 
-    // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -30,54 +29,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user and company in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          name,
-          email,
-          password: hashedPassword,
-          phone,
-          role: "admin",
-        },
-      });
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        phone,
+        role: "admin",
+      },
+    });
 
-      const company = await tx.company.create({
-        data: {
-          name: companyName,
-          gstin,
-        },
-      });
+    const company = await prisma.company.create({
+      data: {
+        name: companyName,
+        gstin,
+      },
+    });
 
-      await tx.companyUser.create({
-        data: {
-          userId: user.id,
-          companyId: company.id,
-          role: "owner",
-        },
-      });
-
-      return { user, company };
+    await prisma.companyUser.create({
+      data: {
+        userId: user.id,
+        companyId: company.id,
+        role: "owner",
+      },
     });
 
     return NextResponse.json(
       {
         message: "Account created successfully",
         user: {
-          id: result.user.id,
-          name: result.user.name,
-          email: result.user.email,
+          id: user.id,
+          name: user.name,
+          email: user.email,
         },
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("Registration error:", error);
+    const message = error?.message || "Something went wrong";
     return NextResponse.json(
-      { error: "Something went wrong. Please try again." },
+      { error: message },
       { status: 500 }
     );
   }
